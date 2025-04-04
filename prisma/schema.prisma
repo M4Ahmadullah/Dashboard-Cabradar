@@ -8,6 +8,16 @@ datasource db {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model CronSchedule {
+  id          Int      @id @default(autoincrement())
+  status      String   @default("pending")
+  eventsCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  scheduledAt DateTime @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model EventsLive {
   id                      String    @id
   title                   String?
@@ -26,15 +36,4 @@ model EventsLive {
   lat                     Float?
   lon                     String?
   labels                  String?
-}
-
-model CronSchedule {
-  id          Int      @id @default(autoincrement())
-  scheduledAt DateTime @db.Timestamptz(6)
-  hour        Int      @default(4)  // The hour (0-23) when the job should run daily in London time
-  minutes     Int      @default(0)  // The minutes (0-59) when the job should run daily in London time
-  status      String   @default("pending") // pending, running, completed, failed
-  eventsCount Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 }

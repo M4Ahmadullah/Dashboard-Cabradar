@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { DateTime } from "luxon";
-import { prisma } from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 
 export async function GET() {
   try {
@@ -26,31 +26,53 @@ export async function GET() {
     // If no schedule exists, create one with default values
     if (!schedule) {
       console.log("No schedule found, creating default schedule");
+      const currentTime = now.toJSDate();
       schedule = await prisma.cronSchedule.create({
         data: {
           scheduledAt: now.startOf("day").plus({ hours: 4 }).toJSDate(),
           status: "pending",
           eventsCount: 0,
+          updatedAt: currentTime,
         },
       });
       console.log("Created new schedule:", schedule);
     }
 
     // Calculate next run time based on the scheduled time
-    const nextRun = DateTime.fromJSDate(schedule.scheduledAt);
-    if (nextRun <= now) {
-      nextRun.plus({ days: 1 });
+    let nextRun = DateTime.fromJSDate(schedule.scheduledAt);
+
+    // If the scheduled time has passed today, move to tomorrow
+    while (nextRun <= now) {
+      nextRun = nextRun.plus({ days: 1 });
     }
+
+    // Calculate time intervals
+    const timeSinceLastRun = schedule.updatedAt
+      ? now.diff(DateTime.fromJSDate(schedule.updatedAt), ["hours", "minutes"])
+      : null;
+
+    const timeUntilNextRun = nextRun.diff(now, ["hours", "minutes"]);
 
     // Extract hour and minutes from scheduledAt
     const scheduledHour = nextRun.hour;
     const scheduledMinutes = nextRun.minute;
 
+    // Calculate hours including minutes as decimal
+    const hoursSinceLastRun = timeSinceLastRun
+      ? (timeSinceLastRun.hours || 0) + (timeSinceLastRun.minutes || 0) / 60
+      : null;
+
+    const hoursUntilNextRun =
+      (timeUntilNextRun.hours || 0) + (timeUntilNextRun.minutes || 0) / 60;
+
     return NextResponse.json({
       status: schedule.status,
+      lastRun: schedule.updatedAt?.toISOString() || null,
       nextRun: nextRun.toISO(),
       scheduledHour,
       scheduledMinutes,
+      hoursSinceLastRun,
+      hoursUntilNextRun,
       message:
         schedule.status === "running"
           ? "Cache update in progress..."
@@ -106,6 +128,7 @@ export async function PUT(request: Request) {
       where: { id: { gt: 0 } }, // Update all records
       data: {
         scheduledAt: nextRun.toJSDate(),
+        updatedAt: now.toJSDate(),
       },
     });
 
