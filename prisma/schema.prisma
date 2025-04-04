@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EventsLive {
+  id                      String    @id
+  title                   String?
+  category                String?
+  start_local             DateTime? @db.Timestamptz(6)
+  true_end                DateTime? @db.Timestamptz(6)
+  end_local               String?
+  predicted_end_local     String?
+  check_timings           String?
+  phq_attendance          BigInt?
+  attendance              String?
+  venue_id                String?
+  venue_name              String?
+  postcode                String?
+  venue_formatted_address String?
+  lat                     Float?
+  lon                     String?
+  labels                  String?
+}
+
+model CronSchedule {
+  id          Int      @id @default(autoincrement())
+  scheduledAt DateTime @db.Timestamptz(6)
+  hour        Int      @default(4)  // The hour (0-23) when the job should run daily in London time
+  minutes     Int      @default(0)  // The minutes (0-59) when the job should run daily in London time
+  status      String   @default("pending") // pending, running, completed, failed
+  eventsCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
