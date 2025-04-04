@@ -2,8 +2,8 @@ name: Cache Update Cron Job
 
 on:
   schedule:
-    # Run at 4 AM London time (UTC+1 in summer, UTC+0 in winter)
-    - cron: "0 3 * * *" # This will run at 3:00 UTC (4:00 AM London time in summer)
+    # Run at 7:20 AM London time (UTC+1 in summer, UTC+0 in winter)
+    - cron: "20 6 * * *" # This will run at 6:20 UTC (7:20 AM London time in summer)
   workflow_dispatch: # Allows manual triggering
 
 jobs:
