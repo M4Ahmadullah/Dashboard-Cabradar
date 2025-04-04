@@ -1,15 +1,9 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import { DateTime } from "luxon";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    // Test database connection
-    await prisma.$connect();
-    console.log("Database connection successful");
-
     // Get current time in London
     const now = DateTime.now().setZone("Europe/London");
     console.log("Current time in London:", now.toISO());
@@ -77,8 +71,6 @@ export async function GET() {
       },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
