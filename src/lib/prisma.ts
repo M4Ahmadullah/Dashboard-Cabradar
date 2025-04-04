@@ -1,17 +1,36 @@
 import { PrismaClient } from "@prisma/client";
 
 const prismaClientSingleton = () => {
-  return new PrismaClient();
+  return new PrismaClient({
+    log: ["query", "error", "warn"],
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL,
+      },
+    },
+  }).$extends({
+    query: {
+      $allOperations({ operation, args, query }) {
+        const start = performance.now();
+        return query(args).finally(() => {
+          const end = performance.now();
+          const time = end - start;
+          if (time > 2000) {
+            console.warn(`Slow query detected: ${operation} took ${time}ms`);
+          }
+        });
+      },
+    },
+  });
 };
 
-type PrismaClientSingleton = ReturnType<typeof prismaClientSingleton>;
+declare global {
+  // eslint-disable-next-line no-var
+  var prisma: undefined | ReturnType<typeof prismaClientSingleton>;
+}
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClientSingleton | undefined;
-};
+const prisma = globalThis.prisma ?? prismaClientSingleton();
 
-const prisma = globalForPrisma.prisma ?? prismaClientSingleton();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
 export default prisma;
