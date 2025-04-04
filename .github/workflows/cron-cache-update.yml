@@ -1,0 +1,19 @@
+name: Cache Update Cron Job
+
+on:
+  schedule:
+    # Run at 4 AM London time (UTC+1 in summer, UTC+0 in winter)
+    - cron: "0 3 * * *" # This will run at 3:00 UTC (4:00 AM London time in summer)
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  update-cache:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Cache Update
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            ${{ secrets.API_URL }}/api/cron/cache-events
