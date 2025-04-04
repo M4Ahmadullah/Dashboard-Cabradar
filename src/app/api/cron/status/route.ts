@@ -6,8 +6,13 @@ const prisma = new PrismaClient();
 
 export async function GET() {
   try {
+    // Test database connection
+    await prisma.$connect();
+    console.log("Database connection successful");
+
     // Get current time in London
     const now = DateTime.now().setZone("Europe/London");
+    console.log("Current time in London:", now.toISO());
 
     // Get the latest schedule
     let schedule = await prisma.cronSchedule.findFirst({
@@ -22,8 +27,11 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
 
+    console.log("Found schedule:", schedule);
+
     // If no schedule exists, create one with default values
     if (!schedule) {
+      console.log("No schedule found, creating default schedule");
       schedule = await prisma.cronSchedule.create({
         data: {
           scheduledAt: now.startOf("day").plus({ hours: 4 }).toJSDate(),
@@ -31,6 +39,7 @@ export async function GET() {
           eventsCount: 0,
         },
       });
+      console.log("Created new schedule:", schedule);
     }
 
     // Calculate next run time based on the scheduled time
@@ -56,11 +65,20 @@ export async function GET() {
           : "Waiting for next scheduled update",
     });
   } catch (error) {
-    console.error("Error fetching cron status:", error);
+    console.error("Detailed error in cron status:", {
+      error: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
+    });
     return NextResponse.json(
-      { error: "Failed to fetch cron status" },
+      {
+        error: "Failed to fetch cron status",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
