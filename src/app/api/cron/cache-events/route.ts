@@ -10,6 +10,16 @@ interface Geometry {
 export async function POST(request: Request) {
   let redisClient;
   try {
+    // Log environment variables (without sensitive data)
+    console.log("Environment check:", {
+      hasRedisHost: !!process.env.REDIS_HOST,
+      hasRedisPort: !!process.env.REDIS_PORT,
+      hasRedisUsername: !!process.env.REDIS_USERNAME,
+      hasRedisPassword: !!process.env.REDIS_PASSWORD,
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      hasCronSecret: !!process.env.CRON_SECRET,
+    });
+
     // Initialize Redis client
     redisClient = getRedisClient();
 
@@ -41,20 +51,17 @@ export async function POST(request: Request) {
       })
     );
 
-    // Get today's date in UTC
+    // Get today's date
     const today = new Date();
-    console.log("Current time:", today.toISOString());
 
-    // Set start time to 4 AM UTC of the current day
+    // Set start time to 4 AM of the current day
     const startTime = new Date(today);
-    startTime.setUTCHours(4, 0, 0, 0);
-    console.log("Start time:", startTime.toISOString());
+    startTime.setHours(4, 0, 0, 0);
 
-    // Set end time to 3:59:59.999 AM UTC of the next day
+    // Set end time to 3:59:59.999 AM of the next day
     const endTime = new Date(today);
-    endTime.setUTCDate(today.getUTCDate() + 1);
-    endTime.setUTCHours(3, 59, 59, 999);
-    console.log("End time:", endTime.toISOString());
+    endTime.setDate(today.getDate() + 1);
+    endTime.setHours(3, 59, 59, 999);
 
     // Generate cache key
     const eventsKey = "EventsLive";
@@ -139,7 +146,11 @@ export async function POST(request: Request) {
 
     // Log the full error stack
     if (error instanceof Error) {
-      console.error("Error stack:", error.stack);
+      console.error("Error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
     }
 
     // Check if it's a Redis connection error
