@@ -27,7 +27,6 @@ export async function GET() {
         status: true,
         eventsCount: true,
         updatedAt: true,
-        scheduledAt: true,
       },
       orderBy: { id: "desc" },
       take: 1,
@@ -43,13 +42,6 @@ export async function GET() {
           status: "pending",
           eventsCount: 0,
           updatedAt: new Date(),
-          scheduledAt: nextRun, // Store the next run time in scheduledAt
-        },
-        select: {
-          status: true,
-          eventsCount: true,
-          updatedAt: true,
-          scheduledAt: true,
         },
       });
       return NextResponse.json({
