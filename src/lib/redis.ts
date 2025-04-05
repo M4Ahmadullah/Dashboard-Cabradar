@@ -27,26 +27,36 @@ export function getRedisClient(): Redis {
       const delay = Math.min(times * 100, 5000);
       return delay;
     },
-    connectTimeout: 10000,
+    connectTimeout: 30000, // Increased from 10s to 30s
     enableReadyCheck: true,
-    maxRetriesPerRequest: 1, // Reduce retries to prevent connection buildup
-    lazyConnect: true, // Don't connect immediately
-    keepAlive: 10000, // Keep connection alive
+    maxRetriesPerRequest: 3, // Increased from 1 to 3
+    lazyConnect: true,
+    keepAlive: 10000,
     reconnectOnError: (err) => {
-      const targetError = "READONLY";
-      if (err.message.includes(targetError)) {
+      // Reconnect on more error types
+      const targetErrors = [
+        "READONLY",
+        "ECONNRESET",
+        "ETIMEDOUT",
+        "ECONNREFUSED",
+      ];
+      if (targetErrors.some((error) => err.message.includes(error))) {
         return true;
       }
       return false;
     },
+    commandTimeout: 30000, // Added command timeout
+    enableOfflineQueue: true, // Enable offline queue
   });
 
   client.on("error", (error) => {
     console.error("Redis Client Error:", error);
-    // If we hit max clients or connection reset, try to reconnect
+    // Handle more error types
     if (
       error.message.includes("max number of clients reached") ||
-      error.message.includes("ECONNRESET")
+      error.message.includes("ECONNRESET") ||
+      error.message.includes("ETIMEDOUT") ||
+      error.message.includes("ECONNREFUSED")
     ) {
       console.log("Connection issue detected, attempting to reconnect...");
       client?.disconnect();
@@ -56,6 +66,14 @@ export function getRedisClient(): Redis {
 
   client.on("connect", () => {
     console.log("Redis Client Connected");
+  });
+
+  client.on("ready", () => {
+    console.log("Redis Client Ready");
+  });
+
+  client.on("close", () => {
+    console.log("Redis Client Connection Closed");
   });
 
   return client;

@@ -1,147 +1,82 @@
 import { NextResponse } from "next/server";
-import { DateTime } from "luxon";
-import prisma from "@/lib/prisma";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
+// Calculate next run time based on cron-job.org schedule (4:15 AM London time)
+function calculateNextRun(): Date {
+  const now = new Date();
+  const nextRun = new Date(now);
+
+  // Set to 4:15 AM London time
+  nextRun.setUTCHours(3, 15, 0, 0); // 4:15 AM London time is 3:15 AM UTC
+
+  // If the time has passed today, set it for tomorrow
+  if (nextRun <= now) {
+    nextRun.setUTCDate(nextRun.getUTCDate() + 1);
+  }
+
+  return nextRun;
+}
 
 export async function GET() {
   try {
-    // Get current time in London
-    const now = DateTime.now().setZone("Europe/London");
-    console.log("Current time in London:", now.toISO());
-
-    // Get the latest schedule
-    let schedule = await prisma.cronSchedule.findFirst({
+    // Get the latest run status
+    const status = await prisma.cronSchedule.findFirst({
       select: {
-        id: true,
-        scheduledAt: true,
         status: true,
         eventsCount: true,
-        createdAt: true,
         updatedAt: true,
+        scheduledAt: true,
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { id: "desc" },
+      take: 1,
     });
 
-    console.log("Found schedule:", schedule);
+    // Calculate next run time
+    const nextRun = calculateNextRun();
 
-    // If no schedule exists, create one with default values
-    if (!schedule) {
-      console.log("No schedule found, creating default schedule");
-      const currentTime = now.toJSDate();
-      schedule = await prisma.cronSchedule.create({
+    // If no status exists, create one
+    if (!status) {
+      const newStatus = await prisma.cronSchedule.create({
         data: {
-          scheduledAt: now.startOf("day").plus({ hours: 4 }).toJSDate(),
           status: "pending",
           eventsCount: 0,
-          updatedAt: currentTime,
+          updatedAt: new Date(),
+          scheduledAt: nextRun, // Store the next run time in scheduledAt
+        },
+        select: {
+          status: true,
+          eventsCount: true,
+          updatedAt: true,
+          scheduledAt: true,
         },
       });
-      console.log("Created new schedule:", schedule);
+      return NextResponse.json({
+        status: newStatus.status,
+        lastRun: newStatus.updatedAt.toISOString(),
+        nextRun: nextRun.toISOString(),
+        eventsCount: newStatus.eventsCount,
+        message: "Waiting for first run",
+      });
     }
-
-    // Calculate next run time based on the scheduled time
-    let nextRun = DateTime.fromJSDate(schedule.scheduledAt);
-
-    // If the scheduled time has passed today, move to tomorrow
-    while (nextRun <= now) {
-      nextRun = nextRun.plus({ days: 1 });
-    }
-
-    // Calculate time intervals
-    const timeSinceLastRun = schedule.updatedAt
-      ? now.diff(DateTime.fromJSDate(schedule.updatedAt), ["hours", "minutes"])
-      : null;
-
-    const timeUntilNextRun = nextRun.diff(now, ["hours", "minutes"]);
-
-    // Extract hour and minutes from scheduledAt
-    const scheduledHour = nextRun.hour;
-    const scheduledMinutes = nextRun.minute;
-
-    // Calculate hours including minutes as decimal
-    const hoursSinceLastRun = timeSinceLastRun
-      ? (timeSinceLastRun.hours || 0) + (timeSinceLastRun.minutes || 0) / 60
-      : null;
-
-    const hoursUntilNextRun =
-      (timeUntilNextRun.hours || 0) + (timeUntilNextRun.minutes || 0) / 60;
 
     return NextResponse.json({
-      status: schedule.status,
-      lastRun: schedule.updatedAt?.toISOString() || null,
-      nextRun: nextRun.toISO(),
-      scheduledHour,
-      scheduledMinutes,
-      hoursSinceLastRun,
-      hoursUntilNextRun,
+      status: status.status,
+      lastRun: status.updatedAt.toISOString(),
+      nextRun: nextRun.toISOString(),
+      eventsCount: status.eventsCount,
       message:
-        schedule.status === "running"
+        status.status === "running"
           ? "Cache update in progress..."
-          : schedule.status === "completed"
+          : status.status === "completed"
           ? "Cache is up to date"
           : "Waiting for next scheduled update",
     });
   } catch (error) {
-    console.error("Detailed error in cron status:", {
-      error: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : undefined,
-    });
+    console.error("Error in cron status:", error);
     return NextResponse.json(
-      {
-        error: "Failed to fetch cron status",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PUT(request: Request) {
-  try {
-    const { hour, minutes } = await request.json();
-
-    if (typeof hour !== "number" || hour < 0 || hour > 23) {
-      return NextResponse.json(
-        { error: "Hour must be between 0 and 23" },
-        { status: 400 }
-      );
-    }
-
-    if (typeof minutes !== "number" || minutes < 0 || minutes > 59) {
-      return NextResponse.json(
-        { error: "Minutes must be between 0 and 59" },
-        { status: 400 }
-      );
-    }
-
-    // Get current time in London
-    const now = DateTime.now().setZone("Europe/London");
-
-    // Calculate next run time (today or tomorrow if the time has passed)
-    let nextRun = now.startOf("day").plus({ hours: hour, minutes: minutes });
-    if (nextRun <= now) {
-      nextRun = nextRun.plus({ days: 1 });
-    }
-
-    // Update the latest schedule
-    await prisma.cronSchedule.updateMany({
-      where: { id: { gt: 0 } }, // Update all records
-      data: {
-        scheduledAt: nextRun.toJSDate(),
-        updatedAt: now.toJSDate(),
-      },
-    });
-
-    return NextResponse.json({
-      message: "Schedule updated successfully",
-      nextRun: nextRun.toISO(),
-      scheduledHour: hour,
-      scheduledMinutes: minutes,
-    });
-  } catch (error) {
-    console.error("Error updating cron schedule:", error);
-    return NextResponse.json(
-      { error: "Failed to update cron schedule" },
+      { error: "Failed to fetch cron status" },
       { status: 500 }
     );
   }

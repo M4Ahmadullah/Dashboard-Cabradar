@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getRedisClient } from "@/lib/redis";
 
+interface Geometry {
+  type: "Point";
+  coordinates: [number, number];
+}
+
 export async function POST(request: Request) {
   const redisClient = getRedisClient();
 
@@ -40,10 +45,8 @@ export async function POST(request: Request) {
     endTime.setDate(today.getDate() + 1);
     endTime.setHours(3, 59, 59, 999);
 
-    // Generate cache keys
-    const dateStr = today.toISOString().split("T")[0];
-    const eventsKey = `events:${dateStr}`;
-    const geoKey = `geo:events:${dateStr}`;
+    // Generate cache key
+    const eventsKey = "EventsLive";
 
     // Fetch events from database
     const events = await prisma.eventsLive.findMany({
@@ -58,40 +61,30 @@ export async function POST(request: Request) {
       },
     });
 
-    // Process events and store geo data
-    const serializedEvents = await Promise.all(
-      events.map(async (event) => {
-        if (event.lat !== null && event.lon !== null) {
-          const longitude =
-            typeof event.lon === "string" ? parseFloat(event.lon) : event.lon;
+    // Process events and prepare data
+    const serializedEvents = events.map((event) => {
+      const eventData = {
+        ...event,
+        phq_attendance: event.phq_attendance?.toString(),
+        geometry: null as Geometry | null,
+      };
 
-          if (!isNaN(longitude) && !isNaN(event.lat)) {
-            try {
-              await redisClient.geoadd(geoKey, longitude, event.lat, event.id);
-            } catch (error) {
-              console.error("Error storing geo data:", error);
-            }
-
-            return {
-              ...event,
-              phq_attendance: event.phq_attendance?.toString(),
-              geometry: {
-                type: "Point",
-                coordinates: [longitude, event.lat],
-              },
-            };
-          }
+      // Add geometry if coordinates are valid
+      if (event.lat !== null && event.lon !== null) {
+        const longitude =
+          typeof event.lon === "string" ? parseFloat(event.lon) : event.lon;
+        if (!isNaN(longitude) && !isNaN(event.lat)) {
+          eventData.geometry = {
+            type: "Point",
+            coordinates: [longitude, event.lat],
+          };
         }
+      }
 
-        return {
-          ...event,
-          phq_attendance: event.phq_attendance?.toString(),
-          geometry: null,
-        };
-      })
-    );
+      return eventData;
+    });
 
-    // Prepare the response
+    // Prepare the response with all data
     const response = {
       success: true,
       data: serializedEvents,
@@ -101,6 +94,9 @@ export async function POST(request: Request) {
           start: startTime.toISOString(),
           end: endTime.toISOString(),
         },
+        totalEvents: events.length,
+        totalGeoPoints: serializedEvents.filter((e) => e.geometry !== null)
+          .length,
       },
     };
 

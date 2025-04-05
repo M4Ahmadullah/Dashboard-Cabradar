@@ -7,17 +7,16 @@ import { Button } from "./button";
 import {
   Clock,
   RefreshCw,
-  Calendar,
   AlertCircle,
   CheckCircle2,
+  Calendar,
 } from "lucide-react";
 
 interface CronStatus {
   status: "pending" | "running" | "completed" | "failed";
   lastRun: string | null;
-  nextRun: string;
-  hoursSinceLastRun: number | null;
-  hoursUntilNextRun: number;
+  nextRun: string | null;
+  eventsCount: number;
   message: string;
 }
 
@@ -119,6 +118,20 @@ export default function CronStatusCard() {
     return `${hours.toFixed(1)} hours`;
   };
 
+  const calculateTimeSinceLastRun = (lastRun: string | null): number | null => {
+    if (!lastRun) return null;
+    const lastRunDate = new Date(lastRun);
+    const now = new Date();
+    return (now.getTime() - lastRunDate.getTime()) / (1000 * 60 * 60);
+  };
+
+  const calculateTimeUntilNextRun = (nextRun: string | null): number => {
+    if (!nextRun) return 0;
+    const nextRunDate = new Date(nextRun);
+    const now = new Date();
+    return (nextRunDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+  };
+
   if (loading) {
     return (
       <Card className="shadow-md border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
@@ -152,6 +165,9 @@ export default function CronStatusCard() {
       </Card>
     );
   }
+
+  const hoursSinceLastRun = calculateTimeSinceLastRun(status?.lastRun ?? null);
+  const hoursUntilNextRun = calculateTimeUntilNextRun(status?.nextRun ?? null);
 
   return (
     <Card className="shadow-md border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
@@ -199,7 +215,7 @@ export default function CronStatusCard() {
                 Time Since Last Run:
               </span>
               <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {formatHours(status?.hoursSinceLastRun ?? null)}
+                {formatHours(hoursSinceLastRun)}
               </span>
             </div>
             <div className="flex justify-between items-center p-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
@@ -208,7 +224,16 @@ export default function CronStatusCard() {
                 Time Until Next Run:
               </span>
               <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {formatHours(status?.hoursUntilNextRun ?? 0)}
+                {formatHours(hoursUntilNextRun)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center p-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              <span className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                Events Cached:
+              </span>
+              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                {status?.eventsCount || 0}
               </span>
             </div>
           </div>
