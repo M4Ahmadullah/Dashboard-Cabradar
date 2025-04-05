@@ -8,17 +8,25 @@ interface Geometry {
 }
 
 export async function POST(request: Request) {
-  const redisClient = getRedisClient();
-
+  let redisClient;
   try {
+    // Initialize Redis client
+    redisClient = getRedisClient();
+
+    // Test Redis connection
+    await redisClient.ping();
+    console.log("Redis connection successful");
+
     // Verify authorization
     const authHeader = request.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.error("Missing or invalid authorization header");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const token = authHeader.split(" ")[1];
     if (token !== process.env.CRON_SECRET) {
+      console.error("Invalid cron secret token");
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
@@ -33,22 +41,26 @@ export async function POST(request: Request) {
       })
     );
 
-    // Get today's date
+    // Get today's date in UTC
     const today = new Date();
+    console.log("Current time:", today.toISOString());
 
-    // Set start time to 4 AM of the current day
+    // Set start time to 4 AM UTC of the current day
     const startTime = new Date(today);
-    startTime.setHours(4, 0, 0, 0);
+    startTime.setUTCHours(4, 0, 0, 0);
+    console.log("Start time:", startTime.toISOString());
 
-    // Set end time to 3:59:59.999 AM of the next day
+    // Set end time to 3:59:59.999 AM UTC of the next day
     const endTime = new Date(today);
-    endTime.setDate(today.getDate() + 1);
-    endTime.setHours(3, 59, 59, 999);
+    endTime.setUTCDate(today.getUTCDate() + 1);
+    endTime.setUTCHours(3, 59, 59, 999);
+    console.log("End time:", endTime.toISOString());
 
     // Generate cache key
     const eventsKey = "EventsLive";
 
     // Fetch events from database
+    console.log("Fetching events from database...");
     const events = await prisma.eventsLive.findMany({
       where: {
         start_local: {
@@ -60,6 +72,7 @@ export async function POST(request: Request) {
         start_local: "asc",
       },
     });
+    console.log(`Found ${events.length} events`);
 
     // Process events and prepare data
     const serializedEvents = events.map((event) => {
@@ -101,7 +114,9 @@ export async function POST(request: Request) {
     };
 
     // Cache the response for 24 hours
+    console.log("Caching events in Redis...");
     await redisClient.setex(eventsKey, 86400, JSON.stringify(response));
+    console.log("Events cached successfully");
 
     // Update cron status to success
     await redisClient.set(
@@ -122,6 +137,11 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Error in cron job:", error);
 
+    // Log the full error stack
+    if (error instanceof Error) {
+      console.error("Error stack:", error.stack);
+    }
+
     // Check if it's a Redis connection error
     if (
       error instanceof Error &&
@@ -138,18 +158,27 @@ export async function POST(request: Request) {
     }
 
     // Update cron status to failed
-    const cronStatusKey = "cron:status";
-    await redisClient.set(
-      cronStatusKey,
-      JSON.stringify({
-        status: "failed",
-        lastRun: new Date().toISOString(),
-        message: "Failed to cache events",
-      })
-    );
+    if (redisClient) {
+      try {
+        await redisClient.set(
+          "cron:status",
+          JSON.stringify({
+            status: "failed",
+            lastRun: new Date().toISOString(),
+            message:
+              error instanceof Error ? error.message : "Failed to cache events",
+          })
+        );
+      } catch (redisError) {
+        console.error("Failed to update Redis status:", redisError);
+      }
+    }
 
     return NextResponse.json(
-      { error: "Failed to cache events" },
+      {
+        error: "Failed to cache events",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }
