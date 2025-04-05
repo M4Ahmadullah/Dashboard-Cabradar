@@ -40,16 +40,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
-    // Update cron status to running
-    const cronStatusKey = "cron:status";
-    await redisClient.set(
-      cronStatusKey,
-      JSON.stringify({
+    // Update cron status to running in database
+    await prisma.cronSchedule.create({
+      data: {
         status: "running",
-        lastRun: new Date().toISOString(),
-        message: "Cache update in progress",
-      })
-    );
+        eventsCount: 0,
+        updatedAt: new Date(),
+      },
+    });
 
     // Get today's date
     const today = new Date();
@@ -104,37 +102,36 @@ export async function POST(request: Request) {
       return eventData;
     });
 
-    // Prepare the response with all data
-    const response = {
-      success: true,
-      data: serializedEvents,
-      timestamp: new Date().toISOString(),
-      metadata: {
-        timeRange: {
-          start: startTime.toISOString(),
-          end: endTime.toISOString(),
-        },
-        totalEvents: events.length,
-        totalGeoPoints: serializedEvents.filter((e) => e.geometry !== null)
-          .length,
-      },
-    };
-
     // Cache the response for 24 hours
     console.log("Caching events in Redis...");
-    await redisClient.setex(eventsKey, 86400, JSON.stringify(response));
-    console.log("Events cached successfully");
-
-    // Update cron status to success
-    await redisClient.set(
-      cronStatusKey,
+    await redisClient.setex(
+      eventsKey,
+      86400,
       JSON.stringify({
-        status: "success",
-        lastRun: new Date().toISOString(),
-        eventsCount: events.length,
-        message: `Successfully cached ${events.length} events`,
+        success: true,
+        data: serializedEvents,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          timeRange: {
+            start: startTime.toISOString(),
+            end: endTime.toISOString(),
+          },
+          totalEvents: events.length,
+          totalGeoPoints: serializedEvents.filter((e) => e.geometry !== null)
+            .length,
+        },
       })
     );
+    console.log("Events cached successfully");
+
+    // Update cron status to completed in database
+    await prisma.cronSchedule.create({
+      data: {
+        status: "completed",
+        eventsCount: events.length,
+        updatedAt: new Date(),
+      },
+    });
 
     return NextResponse.json({
       success: true,
@@ -153,6 +150,19 @@ export async function POST(request: Request) {
       });
     }
 
+    // Update cron status to failed in database
+    try {
+      await prisma.cronSchedule.create({
+        data: {
+          status: "failed",
+          eventsCount: 0,
+          updatedAt: new Date(),
+        },
+      });
+    } catch (dbError) {
+      console.error("Failed to update status in database:", dbError);
+    }
+
     // Check if it's a Redis connection error
     if (
       error instanceof Error &&
@@ -166,23 +176,6 @@ export async function POST(request: Request) {
         },
         { status: 503 }
       );
-    }
-
-    // Update cron status to failed
-    if (redisClient) {
-      try {
-        await redisClient.set(
-          "cron:status",
-          JSON.stringify({
-            status: "failed",
-            lastRun: new Date().toISOString(),
-            message:
-              error instanceof Error ? error.message : "Failed to cache events",
-          })
-        );
-      } catch (redisError) {
-        console.error("Failed to update Redis status:", redisError);
-      }
     }
 
     return NextResponse.json(
