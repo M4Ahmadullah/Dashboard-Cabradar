@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "@/lib/prisma";
 
 export async function GET() {
   try {
@@ -22,7 +20,7 @@ export async function GET() {
       endTime: endTime.toISOString(),
     });
 
-    // Fetch events directly from database
+    // Fetch events from database
     const events = await prisma.eventsLive.findMany({
       where: {
         start_local: {

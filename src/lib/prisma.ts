@@ -1,7 +1,14 @@
 import { PrismaClient } from "@prisma/client";
 
 const prismaClientSingleton = () => {
-  return new PrismaClient({
+  console.log("Initializing Prisma client...");
+  console.log("Database URL present:", !!process.env.DATABASE_URL);
+
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL environment variable is not set");
+  }
+
+  const client = new PrismaClient({
     log: ["query", "error", "warn"],
     datasources: {
       db: {
@@ -22,6 +29,17 @@ const prismaClientSingleton = () => {
       },
     },
   });
+
+  // Test the connection
+  client
+    .$connect()
+    .then(() => console.log("Prisma client connected successfully"))
+    .catch((error) => {
+      console.error("Failed to connect to database:", error);
+      throw error;
+    });
+
+  return client;
 };
 
 declare global {
