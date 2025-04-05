@@ -74,9 +74,12 @@ export async function GET() {
         ? new Date(job.nextExecution * 1000).toISOString()
         : null;
 
+      // Status 1 means completed successfully in cron-job.org
+      const isSuccessful = job.lastStatus === 1;
+
       return NextResponse.json({
         status: job.enabled
-          ? job.lastStatus === 200
+          ? isSuccessful
             ? "completed"
             : "failed"
           : "disabled",
@@ -94,7 +97,7 @@ export async function GET() {
           saveResponses: job.saveResponses,
         },
         message: job.enabled
-          ? job.lastStatus === 200
+          ? isSuccessful
             ? "Last run completed successfully"
             : `Last run failed with status ${job.lastStatus}`
           : "Job is currently disabled on cron-job.org",

@@ -93,11 +93,11 @@ export async function POST(request: Request) {
       return eventData;
     });
 
-    // Cache the response for 24 hours
+    // Cache the response for 23 hours and 45 minutes (85500 seconds)
     console.log("Caching events in Redis...");
     await redisClient.setex(
       eventsKey,
-      86400,
+      300, // 23 hours and 45 minutes = (23 * 3600) + (45 * 60) = 82800 + 2700 = 85500 seconds
       JSON.stringify({
         success: true,
         data: serializedEvents,
@@ -113,7 +113,9 @@ export async function POST(request: Request) {
         },
       })
     );
-    console.log("Events cached successfully");
+    console.log(
+      "Events cached successfully with TTL of 23 hours and 45 minutes"
+    );
 
     return NextResponse.json({
       success: true,
