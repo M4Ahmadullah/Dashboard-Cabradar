@@ -40,15 +40,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
-    // Update cron status to running in database
-    await prisma.cronSchedule.create({
-      data: {
-        status: "running",
-        eventsCount: 0,
-        updatedAt: new Date(),
-      },
-    });
-
     // Get today's date
     const today = new Date();
 
@@ -124,15 +115,6 @@ export async function POST(request: Request) {
     );
     console.log("Events cached successfully");
 
-    // Update cron status to completed in database
-    await prisma.cronSchedule.create({
-      data: {
-        status: "completed",
-        eventsCount: events.length,
-        updatedAt: new Date(),
-      },
-    });
-
     return NextResponse.json({
       success: true,
       message: "Events cached successfully",
@@ -148,19 +130,6 @@ export async function POST(request: Request) {
         message: error.message,
         stack: error.stack,
       });
-    }
-
-    // Update cron status to failed in database
-    try {
-      await prisma.cronSchedule.create({
-        data: {
-          status: "failed",
-          eventsCount: 0,
-          updatedAt: new Date(),
-        },
-      });
-    } catch (dbError) {
-      console.error("Failed to update status in database:", dbError);
     }
 
     // Check if it's a Redis connection error

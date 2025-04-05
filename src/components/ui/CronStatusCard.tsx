@@ -13,11 +13,29 @@ import {
 } from "lucide-react";
 
 interface CronStatus {
-  status: "pending" | "running" | "completed" | "failed";
+  status: "completed" | "failed" | "disabled" | "pending" | "running";
   lastRun: string | null;
   nextRun: string | null;
-  eventsCount: number;
   message: string;
+  jobDetails?: {
+    enabled: boolean;
+    title: string;
+    url: string;
+    schedule: {
+      timezone: string;
+      hours: number[];
+      mdays: number[];
+      minutes: number[];
+      months: number[];
+      wdays: number[];
+      expiresAt: number;
+    };
+    lastStatus: number;
+    lastDuration: number;
+    notifyOnFailure: boolean;
+    notifyOnSuccess: boolean;
+    saveResponses: boolean;
+  };
 }
 
 export default function CronStatusCard() {
@@ -95,8 +113,11 @@ export default function CronStatusCard() {
     if (!dateString) return "Never";
     try {
       const date = new Date(dateString);
-      return `London ${date.toLocaleString("en-GB", {
-        timeZone: "Europe/London",
+      const timezone = status?.jobDetails?.schedule?.timezone || "UTC";
+      const city = timezone.split("/").pop() || timezone;
+
+      return `${city} ${date.toLocaleString("en-GB", {
+        timeZone: timezone,
         day: "numeric",
         month: "short",
         hour: "2-digit",
@@ -227,15 +248,34 @@ export default function CronStatusCard() {
                 {formatHours(hoursUntilNextRun)}
               </span>
             </div>
-            <div className="flex justify-between items-center p-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-              <span className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4" />
-                Events Cached:
-              </span>
-              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {status?.eventsCount || 0}
-              </span>
-            </div>
+
+            {status?.jobDetails && (
+              <>
+                <div className="h-px bg-gray-200 dark:bg-gray-700 my-2"></div>
+                <div className="flex justify-between items-center p-2">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Last Duration:
+                  </span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {status.jobDetails.lastDuration}ms
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-2">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Last Status:
+                  </span>
+                  <span
+                    className={`text-sm font-medium ${
+                      status.jobDetails.lastStatus === 200
+                        ? "text-green-600 dark:text-green-400"
+                        : "text-red-600 dark:text-red-400"
+                    }`}
+                  >
+                    {status.jobDetails.lastStatus}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           <Button
